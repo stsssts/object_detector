@@ -1,0 +1,11 @@
+basket_detector:
+  lower_bound:
+    [30, 215, 0]
+  upper_bound:
+    [60, 255, 255]
+
+line_detector:
+  lower_bound:
+    [50, 0, 0]
+  upper_bound:
+    [100, 255, 255]
