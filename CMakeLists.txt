@@ -10,10 +10,9 @@ add_definitions(-std=c++11)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  sensor_msgs
-  geometry_msgs
   cv_bridge
   image_transport
+  akara_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -139,8 +138,6 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/object_detector_node.cpp)
-add_executable(camera_${PROJECT_NAME}_node src/camera_object_detector_node.cpp)
-
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,15 +150,11 @@ add_executable(camera_${PROJECT_NAME}_node src/camera_object_detector_node.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(object_detector_node
+target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
 
-target_link_libraries(camera_object_detector_node
-  ${catkin_LIBRARIES}
-  ${OpenCV_LIBRARIES}
-)
 #############
 ## Install ##
 #############

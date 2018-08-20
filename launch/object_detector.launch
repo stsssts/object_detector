@@ -1,13 +1,17 @@
 <launch>
-  <node name="object_detector" pkg="object_detector" type="camera_object_detector_node" output="screen">
-    <param name="scan_width" value="4" />
-    <param name="image_width" value="320" />
-    <param name="image_height" value="240" />
-    <param name="rotated" value="false" />
+  <node name="object_detector" pkg="object_detector" type="ellipse_detector_node" output="screen">
+    <param name="use_capture" value="true" /> <!-- capture or image topic -->
+    <param name="camera_id" value="0" />
+
+    <param name="width" value="640" />
+    <param name="height" value="480" />
+    <param name="fps" value="30" />
+    <param name="debug" value="true" />
+
 
     <rosparam command="load" file="$(find object_detector)/config/home.yaml" />
     <!-- <rosparam command="load" file="$(find object_detector)/config/home.yaml" /> -->
 
-    <remap from="usb_cam/image_raw" to="camera0/compressed" />
+<!--    <remap from="usb_cam/image_raw" to="camera0/compressed" />-->
   </node>
 </launch>

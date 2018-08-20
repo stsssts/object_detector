@@ -18,27 +18,10 @@ struct ColorBounds
   cv::Scalar upper;
 };
 
-struct Parameters
-{
-  double scan_width;
-  int image_width;
-  int image_height;
-  bool rotated;
-
-  ColorBounds line_bounds;
-  ColorBounds basket_bounds;
-};
-
-struct Line
-{
-  double center;
-  double angle;
-};
-
 class ColorDetector
 {
 public:
-  void setParameters(ColorBounds b)
+  void setBounds(ColorBounds b)
   {
     bounds_ = b;
   }
@@ -63,79 +46,118 @@ private:
   ColorBounds bounds_;
 };
 
-class ObjectDetector
+class LineDetector
 {
 public:
-  ObjectDetector() {}
+  LineDetector() {}
 
-  void setParameters(Parameters p)
+  void setParameters(cv::Size img_size, int scan_width, ColorBounds bounds)
   {
-    params_ = p;
-    line_cd_.setParameters(params_.line_bounds);
-    basket_cd_.setParameters(params_.basket_bounds);
+    cd_.setBounds(bounds);
 
-    int w = p.image_width, h = p.image_height, sw = p.scan_width;
+    int w = img_size.width, h = img_size.height, sw = scan_width;
     rois_.push_back(cv::Rect(cv::Point(0, 0),     cv::Point(w, sw)));
     rois_.push_back(cv::Rect(cv::Point(0, h-sw),  cv::Point(w, h)));
     rois_.push_back(cv::Rect(cv::Point(0, sw),    cv::Point(sw, h-sw)));
     rois_.push_back(cv::Rect(cv::Point(w-sw, sw), cv::Point(w, h-sw)));
   }
 
-  bool detectLine(cv::Mat &imgHSV, Line &line)
+  bool detect(cv::Mat& imgHSV, cv::Vec4f& line)
   {
-    std::vector<cv::Point2f> points;
+    std::vector<cv::Point> points;
     cv::Point p;
     for (auto& roi : rois_)
     {
-      if (line_cd_.getPixel(imgHSV(roi), p))
-        points.push_back(pixelToPoint(p + roi.tl()));
+      if (cd_.getPixel(imgHSV(roi), p))
+        points.push_back(p + roi.tl());
     }
 
     if (points.size() < 2)
       return false;
 
-    cv::Vec4f l;
-    cv::fitLine(points, l, CV_DIST_L2, 0, 0.01, 0.01);
-
-    if (params_.rotated)
-    {
-      line.angle = atan2(l[0], l[1]) - M_PI_2;
-      line.center = (fabs(line.angle) < M_PI_4) ? (l[3] - l[1] * l[2] / l[0]) : 0;
-    }
-    else
-    {
-      line.angle = atan2(l[1], l[0]);
-      line.angle += (line.angle < 0) ? M_PI_2 : -M_PI_2;
-      line.center = (fabs(line.angle) < M_PI_4) ? (l[2] - l[0] * l[3] / l[1]) : 0;
-    }
-
+    cv::fitLine(points, line, CV_DIST_L2, 0, 0.01, 0.01);
     return true;
-  }
-
-  bool detectBasket(cv::Mat &imgHSV, cv::Point2f &basket)
-  {
-    cv::Point center;
-    if (!basket_cd_.getPixel(imgHSV, center))
-      return false;
-
-    basket = pixelToPoint(center);
-    return true;
+//    if (rotated_)
+//    {
+//      line.angle = atan2(l[0], l[1]) - M_PI_2;
+//      line.center = (fabs(line.angle) < M_PI_4) ? (l[3] - l[1] * l[2] / l[0]) : 0;
+//    }
+//    else
+//    {
+//      line.angle = atan2(l[1], l[0]);
+//      line.angle += (line.angle < 0) ? M_PI_2 : -M_PI_2;
+//      line.center = (fabs(line.angle) < M_PI_4) ? (l[2] - l[0] * l[3] / l[1]) : 0;
+//    }
   }
 
 private:
-  Parameters params_;
-
+  ColorDetector cd_;
   std::vector<cv::Rect> rois_;
+};
 
-  ColorDetector line_cd_;
-  ColorDetector basket_cd_;
+class BasketDetector
+{
+public:
+  BasketDetector() {}
 
-  cv::Point2f pixelToPoint(cv::Point pixel)
+  void setParameters(ColorBounds bounds)
   {
-    cv::Point2f p(pixel.x - params_.image_width/2.0,
-                  pixel.y - params_.image_height/2.0);
-    p.x /= params_.image_width / 2.0;
-    p.y /= params_.image_height / 2.0;
-    return p;
+    cd_.setBounds(bounds);
+  }
+
+  bool detect(cv::Mat& imgHSV, cv::Point& center)
+  {
+    if (cd_.getPixel(imgHSV, center))
+      return true;
+
+    return false;
+  }
+
+private:
+  ColorDetector cd_;
+};
+
+class EllipseDetector
+{
+public:
+  EllipseDetector() {}
+
+  void setParameters() {}
+
+  bool detect(cv::Mat& imgGray, cv::RotatedRect& ellipse)
+  {
+    std::vector< std::vector<cv::Point> > contours;
+    std::vector<cv::Point> hull;
+
+    cv::GaussianBlur(imgGray, imgGray, cv::Size(5, 5), 2);
+
+    double cannyParams = cv::threshold(imgGray, imgGray, 0, 255, CV_THRESH_BINARY_INV + CV_THRESH_OTSU);
+    cv::Canny(imgGray, imgGray, cannyParams, cannyParams / 2.0F);
+    cv::findContours(imgGray, contours, CV_RETR_TREE, CV_CHAIN_APPROX_NONE);
+    for (int i = 0; i < contours.size(); i++)
+    {
+      if (contours.at(i).size() < 5)
+        continue;
+
+      if (std::fabs(cv::contourArea(contours.at(i))) < 300.0)
+        continue;
+
+      cv::RotatedRect bEllipse = cv::fitEllipse(contours.at(i));
+      cv::convexHull(contours.at(i), hull, true);
+      cv::approxPolyDP(hull, hull, 15, true);
+      if (!cv::isContourConvex(hull))
+        continue;
+
+      double area = cv::contourArea(contours.at(i));
+      cv::Rect r = cv::boundingRect(contours.at(i));
+      double radius = r.width / 2.0;
+      if (std::abs(1.0 - ((double) r.width / (double) r.height)) <= 0.5 &&
+          std::abs(1.0 - (area / (CV_PI * std::pow(radius, 2.0)))) <= 0.2)
+      {
+        ellipse = bEllipse;
+        return true;
+      }
+    }
+    return false;
   }
 };
